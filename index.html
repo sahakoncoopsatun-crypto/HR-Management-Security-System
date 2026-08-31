@@ -829,9 +829,15 @@
                 if (hasPermission('approve_leaves') || hasPermission('evaluate_managers') || hasPermission('evaluate_committee')) {
                     const currentUser = getCurrentUser();
                     let evalCount = 0;
-                    if (currentUser.role === 'MANAGER' || currentUser.role === 'ADMIN') evalCount = performanceEvaluations.filter(r => r.status === 'Pending Manager').length;
-                    else if (currentUser.role === 'COMMITTEE') evalCount = performanceEvaluations.filter(r => r.status === 'Pending Committee').length;
-                    else if (currentUser.role === 'CHAIRMAN') evalCount = performanceEvaluations.filter(r => r.status === 'Pending Chairman').length;
+                    if (currentUser.role === 'MANAGER') {
+                        evalCount = performanceEvaluations.filter(r => r.status === 'Pending Manager' && employeesDB.find(emp => emp.empId === r.empId)?.role === 'EMPLOYEE').length;
+                    } else if (currentUser.role === 'COMMITTEE') {
+                        evalCount = performanceEvaluations.filter(r => r.status === 'Pending Committee' && employeesDB.find(emp => emp.empId === r.empId)?.role === 'MANAGER').length;
+                    } else if (currentUser.role === 'CHAIRMAN') {
+                        evalCount = performanceEvaluations.filter(r => r.status === 'Pending Chairman' && (employeesDB.find(emp => emp.empId === r.empId)?.role === 'EMPLOYEE' || employeesDB.find(emp => emp.empId === r.empId)?.role === 'MANAGER')).length;
+                    } else if (currentUser.role === 'ADMIN') {
+                        evalCount = performanceEvaluations.filter(r => r.status.startsWith('Pending')).length;
+                    }
                     html += `
                         <button onclick="changeTab('evaluate-team')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-medium transition ${activeTab === 'evaluate-team' ? 'sidebar-item-active' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}">
                             <div class="flex items-center gap-3">
@@ -1562,18 +1568,32 @@
         // --- VIEW: EVALUATE TEAM (MANAGER) ---
         function renderEvaluateTeamView() {
             const currentUser = getCurrentUser();
-            let targetStatus = 'Pending Manager';
-            let title = 'รายการรอการประเมินจากหัวหน้างาน (สำหรับพนักงาน)';
+            let title = 'ประเมินผลทีมงาน (Manager Assessment)';
+            let pendingEvals = [];
             
-            if (currentUser.role === 'COMMITTEE') {
-                targetStatus = 'Pending Committee';
-                title = 'รายการรอการประเมินจากคณะกรรมการ (สำหรับผู้จัดการ)';
+            if (currentUser.role === 'MANAGER') {
+                title = 'ประเมินผลเจ้าหน้าที่ (สำหรับผู้จัดการ)';
+                pendingEvals = performanceEvaluations.filter(e => {
+                    const emp = employeesDB.find(emp => emp.empId === e.empId);
+                    return emp && emp.role === 'EMPLOYEE' && e.status === 'Pending Manager';
+                });
+            } else if (currentUser.role === 'COMMITTEE') {
+                title = 'ประเมินผลผู้จัดการ (สำหรับคณะกรรมการ)';
+                pendingEvals = performanceEvaluations.filter(e => {
+                    const emp = employeesDB.find(emp => emp.empId === e.empId);
+                    return emp && emp.role === 'MANAGER' && e.status === 'Pending Committee';
+                });
             } else if (currentUser.role === 'CHAIRMAN') {
-                targetStatus = 'Pending Chairman';
-                title = 'รายการรอการประเมินจากประธาน (สำหรับคณะกรรมการ)';
+                title = 'ประเมินผลเจ้าหน้าที่ และ ผู้จัดการ (สำหรับประธาน)';
+                pendingEvals = performanceEvaluations.filter(e => {
+                    const emp = employeesDB.find(emp => emp.empId === e.empId);
+                    return emp && (emp.role === 'EMPLOYEE' || emp.role === 'MANAGER') && e.status === 'Pending Chairman';
+                });
+            } else if (currentUser.role === 'ADMIN') {
+                title = 'การประเมินที่รออนุมัติทั้งหมด (Admin)';
+                pendingEvals = performanceEvaluations.filter(e => e.status.startsWith('Pending'));
             }
-
-            const pendingEvals = performanceEvaluations.filter(e => e.status === targetStatus);
+            
             const completedEvals = performanceEvaluations.filter(e => e.status === 'Completed');
             
             return `
